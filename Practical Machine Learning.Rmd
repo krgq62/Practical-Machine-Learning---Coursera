@@ -1,0 +1,132 @@
+
+---
+title: "Practical Machine Learning - Prediction Assignment"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+---
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).
+
+### Data
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+
+
+#### Libraries needed to execute the code
+```{r, echo = TRUE, results = 'hide', warning = FALSE, message = FALSE}
+library(datasets)
+library(tidyverse)
+library(knitr)
+library(rmarkdown)
+library(scales)
+library(caret)
+library(caretEnsemble)
+library(quantmod)
+library(Quandl)
+library(randomForest)
+library(e1071)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+
+set.seed(77)
+```
+
+#### Load Data into R
+```{r, results = 'hide'}
+tst <- read.csv(file = "pml-testing.csv")
+trn <- read.csv(file = "pml-training.csv")
+```
+
+#### What variables exist?
+```{r, echo = TRUE, warning = FALSE, results = 'hide'}
+names(tst)
+names(trn)
+str(tst)
+str(trn)
+```
+#### Cleaning the Data
+In cleaning the data, null values were removed and columns with low variance were removed in order to decrease computing time when creating the model.
+```{r, echo = TRUE, warning = FALSE, results = 'hide'}
+# Remove null values
+trn_comp <- complete.cases(t(trn))
+tst_comp <- complete.cases(t(tst))
+trn_fin <- trn[, trn_comp]
+tst_fin <- tst[, tst_comp]
+
+# Remove irrelevant columns
+trn_fin <- trn_fin[,-c(1,2,3,4,5,6,7)]
+tst_fin <- tst_fin[,-c(1,2,3,4,5,6,7)]
+
+threshold <- nrow(trn_fin)*0.95
+na_columns <- !apply(trn_fin, 2, function(x) sum(is.na(x)) > threshold || sum(x=="") > threshold)
+trn_fin <- trn_fin[, na_columns]
+na_columns <- !apply(tst_fin, 2, function(x) sum(is.na(x)) > threshold || sum(x=="") > threshold)
+tst_fin <- tst_fin[, na_columns]
+```
+
+
+#### Exploratory Analysis
+```{r, echo = TRUE, warning = FALSE, results = 'hide'}
+summary(trn_fin)
+summary(tst_fin)
+```
+
+#### Partition traning data set for cross validation
+70% of the training data will be used to train the model and 30% of it will be used to validate the model. This code is creating that data partition to allow for this.
+```{r, echo = TRUE, warning = FALSE}
+training <- createDataPartition(y = trn_fin$classe, p = 0.70, list = FALSE)
+trn_fin1 <- trn_fin[training, ]
+trn_fin2 <- trn_fin[-training, ]
+
+dim(trn_fin1)
+dim(trn_fin2)
+```
+
+#### Model Development
+A random forest model was chosen due to the complexity of the data and the large number of variables and the ability of a random forest to use averaged decision trees to predict results. 
+```{r, echo = TRUE, warning = FALSE}
+rf_model <- randomForest(classe ~., data = trn_fin1, method = "class")
+rf_model
+```
+The random forest model has 500 trees and an estimated out of sample error of 0.6%. It appears to be a good predictor of class and will be used on now on the validation data to validate the model accuracy estimates.  
+
+#### Prediction Performance
+```{r, echo = TRUE, warning = FALSE}
+rf_predict <- predict(rf_model, trn_fin2)
+
+confusionMatrix(trn_fin2$classe, rf_predict)
+```
+The model has an accuracy of 99.29% using the validation data. Therefore, I will predict the class of the weight lifting exercise in the test set data using this model.
+
+#### Apply the random forest prediction model to the test set (Run the Model)
+```{r, echo = TRUE, warning = FALSE}
+rf_test <- predict(rf_model, tst_fin)
+rf_test
+```
+
+### Appendix A
+#### Representative Depiction of Random Forest Model
+```{r, echo = TRUE, warning= FALSE}
+rf_model_rep <- rpart(classe ~., data = trn_fin1, method = "class")
+fancyRpartPlot(rf_model_rep)
+```
+
+
+
+
+
